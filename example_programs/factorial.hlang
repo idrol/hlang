@@ -1,0 +1,11 @@
+int factorial(int num) do
+	if num == 1 then
+		return num
+	end
+	
+	return factorial(num-1)
+end
+
+int main() do
+	global int fact = factorial(10);
+end

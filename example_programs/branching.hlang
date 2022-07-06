@@ -1,0 +1,14 @@
+int num = 10
+
+if false then
+	num = 5
+else
+	num = 20
+end
+
+if memma >= 15 then
+    num = 0
+    if num < 20 then
+        num = 1
+    end
+end

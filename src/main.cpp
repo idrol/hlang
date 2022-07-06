@@ -13,13 +13,12 @@ int main(int argc, char* argv[]) {
 
     std::vector<Token> tokens = tokenize(argv[1]);
 
-    std::shared_ptr<Node> ast = parseTokens(tokens);
+    auto ast = parseTokens(tokens);
 
-    run_program(ast);
+    debugAst(ast);
 
-    size_t var = *(size_t*)get_var("test");
-    printf("test: %i\n", var);
+    //run_program(ast);
 
-    var = *(size_t*)get_var("memes");
-    printf("memes: %i\n", var);
+    auto var = get_bool_var("isTrue");
+    printf("isTrue: %i\n", var);
 }

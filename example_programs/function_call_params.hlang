@@ -1,0 +1,6 @@
+void fun(int num) do
+    num = num + 2
+end
+
+int num = 10
+fun(num)

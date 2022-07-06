@@ -69,5 +69,13 @@ else()
 	message(FATAL_ERROR "Unsupported build type")
 endif()
 
+add_custom_target(CopyExamplePrograms)
+add_custom_command(TARGET CopyExamplePrograms POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+		"${CMAKE_CURRENT_SOURCE_DIR}/example_programs"
+		${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+		)
+
 add_executable(mylangc src/main.cpp)
+add_dependencies(mylangc CopyExamplePrograms)
 add_subdirectory(src)

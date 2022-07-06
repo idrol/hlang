@@ -11,11 +11,18 @@
 enum class NodeType {
     PROGRAM,
     STATEMENT,
+    LAST_STATEMENT,
     EXPRESSION,
-    OPERATOR,
+    PREFIX_EXPRESSION,
+    BINARY_OPERATION,
+    IDENTIFIER,
     NUMBER,
     DECLARATION,
-    ASSIGNMENT
+    FUNCTION_DECLARATION,
+    FUNCTION_CALL,
+    ASSIGNMENT,
+    BLOCK,
+    BRANCH
 };
 
 enum class OperatorType {
@@ -23,47 +30,172 @@ enum class OperatorType {
     ADD,
     MUL,
     DIV,
-    SUB
+    SUB,
+    EQUALS,
+    LESS_EQUALS,
+    LARGER_EQUALS,
+    LESS_THAN,
+    LARGER_THAN,
+    NOT_EQUALS
 };
 
 enum class DataType {
+    VOID,
     BOOL,
     INT,
     FLOAT,
     STRING
 };
 
+struct ParamDeclaration {
+    DataType type;
+    std::string name;
+    size_t stackBaseOffset;
+};
+
+struct VariableDeclaration {
+    DataType type;
+    std::string name;
+    size_t stackBaseOffset;
+};
+
 class Node {
 public:
-    Node(std::shared_ptr<Node> parent): parent(std::move(parent)) {};
+    Node() {};
     NodeType type;
-    std::shared_ptr<Node> parent;
-    std::vector<std::shared_ptr<Node>> leafs;
+};
+
+class ExpressionNode: public Node {
+public:
+    ExpressionNode() {
+        type = NodeType::EXPRESSION;
+    };
+
+    std::shared_ptr<Node> operation;
+};
+
+class PrefixExpression: public ExpressionNode {
+public:
+    PrefixExpression() {
+        type = NodeType::PREFIX_EXPRESSION;
+    }
+};
+
+class BinaryOperation: public Node {
+public:
+    BinaryOperation() {
+        type = NodeType::BINARY_OPERATION;
+    }
+
+    std::shared_ptr<Node> left, right;
+    OperatorType op;
+    size_t precedence;
+};
+
+class IdentifierNode: public Node {
+public:
+    IdentifierNode() {
+        type = NodeType::IDENTIFIER;
+    };
+
+    std::string identifier;
 };
 
 class NumberNode: public Node {
 public:
-    NumberNode(std::shared_ptr<Node> parent): Node(std::move(parent)) {};
-    size_t value;
+    NumberNode() {
+        type = NodeType::NUMBER;
+    };
+
+    int value;
 };
 
-class OperatorNode: public Node {
+class StatementNode: public Node {
 public:
-    OperatorNode(std::shared_ptr<Node> parent): Node(std::move(parent)) {};
-    OperatorType opType;
+    StatementNode() {
+        type = NodeType::STATEMENT;
+    }
 };
 
-class DeclarationNode: public Node {
+class LastStatementNode: public StatementNode {
 public:
-    DeclarationNode(std::shared_ptr<Node> parent): Node(std::move(parent)) {};
+    LastStatementNode() {
+        type = NodeType::LAST_STATEMENT;
+    }
+
+    std::shared_ptr<ExpressionNode> returnExpr; // Optional
+};
+
+class DeclarationNode: public StatementNode {
+public:
+    DeclarationNode() {
+        type = NodeType::DECLARATION;
+    };
+    bool isGlobal = false;
     DataType dataType;
     std::string name;
+    std::shared_ptr<ExpressionNode> defaultValueExpression;
 };
 
-class AssignmentNode: public Node {
+
+class AssignmentNode: public StatementNode {
 public:
-    AssignmentNode(std::shared_ptr<Node> parent): Node(std::move(parent)) {};
+    AssignmentNode() {
+        type = NodeType::ASSIGNMENT;
+    };
     std::string name;
+    std::shared_ptr<ExpressionNode> expression;
 };
 
-std::shared_ptr<Node> parseTokens(std::vector<Token> tokens);
+class BlockNode: public Node {
+public:
+    BlockNode() {
+        type = NodeType::BLOCK;
+    };
+
+    std::vector<std::shared_ptr<StatementNode>> statements;
+};
+
+class FunctionCallNode: public StatementNode {
+public:
+    FunctionCallNode() {
+        type = NodeType::FUNCTION_CALL;
+    }
+
+    std::string functionIdentifier;
+    std::vector<std::shared_ptr<ExpressionNode>> argumentsList;
+};
+
+class FunctionDeclarationNode: public StatementNode {
+public:
+    FunctionDeclarationNode() {
+        type = NodeType::FUNCTION_DECLARATION;
+    }
+
+    int numParams;
+    DataType returnType;
+    std::string functionName;
+    std::vector<std::shared_ptr<DeclarationNode>> paramDeclarations;
+    std::shared_ptr<BlockNode> functionBlock;
+};
+
+class BranchNode: public StatementNode {
+public:
+    BranchNode() {
+        type = NodeType::BRANCH;
+    };
+    std::shared_ptr<ExpressionNode> expression;
+    std::shared_ptr<BlockNode> trueBlock;
+    std::shared_ptr<BlockNode> falseBlock;
+};
+
+class ProgramNode: public Node {
+public:
+    ProgramNode() {
+        type = NodeType::PROGRAM;
+    };
+    std::shared_ptr<BlockNode> programBlock;
+};
+
+std::shared_ptr<ProgramNode> parseTokens(std::vector<Token> tokens);
+void debugAst(std::shared_ptr<ProgramNode> node);

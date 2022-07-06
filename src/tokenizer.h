@@ -9,15 +9,20 @@
 enum class EToken {
     UNKNOWN,
     TYPE, // int bool float
-    OPERATOR, // + = ; - *
+    OPERATOR, // + = ; - * == <= < > >= !=
+    KEYWORD,
     IDENTIFIER, // someVarName
     NUMBER, // duh
+    LIST_SEPARATOR, // ,
     NEWLINE
 };
 
 struct Token {
     EToken token;
     std::string value;
+    size_t line;
+    size_t column;
+    size_t len;
 };
 
 std::vector<Token> tokenize(const char* source);

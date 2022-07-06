@@ -5,8 +5,22 @@
 #include <unordered_map>
 #include <stack>
 
-size_t run_op(size_t num1, OperatorType opType, size_t num2) {
+std::vector<std::unordered_map<std::string, Variable>> variableScopes;
+
+// Valid until next hlang call
+Variable* resolve_variable(std::string varName) {
+    for(int i = variableScopes.size()-1; i >= 0; i--) {
+        auto it = variableScopes[i].find(varName);
+        if(it != variableScopes[i].end()) {
+            return &it->second;
+        }
+    }
+    return nullptr;
+}
+
+int run_op(int num1, OperatorType opType, int num2) {
     switch (opType) {
+        default:
         case OperatorType::INVALID:
             fprintf(stderr, "Invalid optype recieved\n");
             exit(-1);
@@ -18,94 +32,138 @@ size_t run_op(size_t num1, OperatorType opType, size_t num2) {
             return num1/num2;
         case OperatorType::SUB:
             return num1-num2;
+        case OperatorType::LESS_THAN:
+            return num1<num2;
+        case OperatorType::LARGER_THAN:
+            return num1>num2;
+        case OperatorType::LESS_EQUALS:
+            return num1<=num2;
+        case OperatorType::LARGER_EQUALS:
+            return num1>=num2;
+        case OperatorType::EQUALS:
+            return num1==num2;
+        case OperatorType::NOT_EQUALS:
+            return num1!=num2;
     }
 }
 
-size_t run_expression(std::shared_ptr<Node> node) {
+HInt run_binary_operation(std::shared_ptr<BinaryOperation> binaryOp);
+
+HInt run_binary_operand(std::shared_ptr<Node> node) {
+    if(node->type == NodeType::NUMBER) {
+        return std::reinterpret_pointer_cast<NumberNode>(node)->value;
+    } else if(node->type == NodeType::IDENTIFIER) {
+        auto identifier = std::reinterpret_pointer_cast<IdentifierNode>(node);
+        auto var = resolve_variable(identifier->identifier);
+        if(!var) {
+            fprintf(stderr, "%s has not been declared\n", identifier->identifier.c_str());
+            exit(-1);
+        }
+        return var->GetValue<HInt>();
+    } else if(node->type == NodeType::BINARY_OPERATION) {
+        return run_binary_operation(std::reinterpret_pointer_cast<BinaryOperation>(node));
+    } else if(node->type == NodeType::PREFIX_EXPRESSION) {
+        return run_expression(std::reinterpret_pointer_cast<ExpressionNode>(node));
+    }
+    // TODO add function call
+    fprintf(stderr, "Node type is not supported as expression operand\n");
+    exit(-1);
+}
+
+HInt run_binary_operation(std::shared_ptr<BinaryOperation> binaryOp) {
+    HInt leftValue = run_binary_operand(binaryOp->left);
+    HInt rightValue = run_binary_operand(binaryOp->right);
+
+    return run_op(leftValue, binaryOp->op, rightValue);
+}
+
+HInt run_expression(std::shared_ptr<ExpressionNode> node) {
     if(node->type != NodeType::EXPRESSION) {
         fprintf(stderr, "Passed node is not an expression!\n");
         exit(-1);
     }
 
-    size_t num = std::reinterpret_pointer_cast<NumberNode>(node->leafs[0])->value;
-    size_t cursor = 1;
-    while(cursor < node->leafs.size()) {
-        auto opNode = std::reinterpret_pointer_cast<OperatorNode>(node->leafs[cursor]);
-        size_t num2;
-        if(node->leafs[cursor+1]->type == NodeType::EXPRESSION) {
-            num2 = run_expression(node->leafs[cursor+1]);
-        } else {
-            num2 = std::reinterpret_pointer_cast<NumberNode>(node->leafs[cursor+1])->value;
-        }
-        num = run_op(num, opNode->opType, num2);
-        cursor += 2;
-    }
-
-    return num;
+    return run_binary_operand(node->operation);
 }
 
-std::unordered_map<std::string, Variable> globalVariables;
-std::stack<std::unordered_map<std::string, Variable>> variableScopes;
 
 Variable allocDataType(DataType type) {
     switch (type) {
-        case DataType::BOOL:
         case DataType::FLOAT:
         case DataType::STRING:
-            fprintf(stderr, "Unsupported\n");
+            fprintf(stderr, "Unsupported data type in allocation\n");
             exit(-1);
         case DataType::INT:
             return Variable(sizeof(int));
+        case DataType::BOOL:
+            return Variable(sizeof(bool));
     }
 }
 
 void run_declaration(std::shared_ptr<DeclarationNode> node) {
-    globalVariables[node->name] = allocDataType(node->dataType);
+    auto& scope = variableScopes[variableScopes.size()-1];
+    scope[node->name] = allocDataType(node->dataType);
 }
 
 void run_assignment(std::shared_ptr<AssignmentNode> node) {
-    auto it = globalVariables.find(node->name);
-    if(it == globalVariables.end()) {
-        fprintf(stderr, "%s has not been declared\n");
+    auto var = resolve_variable(node->name);
+    if(!var) {
+        fprintf(stderr, "%s has not been declared\n", node->name.c_str());
         exit(-1);
     }
-    size_t num = 0;
-    if(node->leafs[0]->type == NodeType::NUMBER) {
-        num = std::reinterpret_pointer_cast<NumberNode>(node->leafs[0])->value;
-    } else {
-        num = run_expression(node->leafs[0]);
-    }
-
-    globalVariables[node->name].SetValue(num);
+    var->SetValue(run_expression(node->expression));
 }
 
-void run_statement(std::shared_ptr<Node> node) {
-    if(node->type != NodeType::STATEMENT) {
-        fprintf(stderr, "Invalid node passed to run_statement\n");
+void run_statement(std::shared_ptr<StatementNode> statementNode) {
+
+    if(statementNode->type == NodeType::DECLARATION) {
+        run_declaration(std::reinterpret_pointer_cast<DeclarationNode>(statementNode));
+    } else if(statementNode->type == NodeType::ASSIGNMENT) {
+        run_assignment(std::reinterpret_pointer_cast<AssignmentNode>(statementNode));
+    } else {
+        fprintf(stderr, "Invalid node found inside of statement node\n");
         exit(-1);
     }
-    for(auto& statementPart: node->leafs) {
-        if(statementPart->type == NodeType::DECLARATION) {
-            run_declaration(std::reinterpret_pointer_cast<DeclarationNode>(statementPart));
-        } else if(statementPart->type == NodeType::ASSIGNMENT) {
-            run_assignment(std::reinterpret_pointer_cast<AssignmentNode>(statementPart));
-        } else {
-            fprintf(stderr, "Invalid node found inside of statement node\n");
-            exit(-1);
+}
+
+void run_block(std::shared_ptr<BlockNode> block);
+
+void run_branch(std::shared_ptr<BranchNode> branch) {
+    HInt compareValue = run_expression(branch->expression);
+    if(compareValue == 0) {
+        run_block(branch->falseBlock);
+    } else {
+        run_block(branch->trueBlock);
+    }
+}
+
+void run_block(std::shared_ptr<BlockNode> block) {
+    variableScopes.emplace_back();
+    for(auto &node: block->statements) {
+        if(node->type == NodeType::STATEMENT) {
+            run_statement(node);
+        } else if(node->type == NodeType::BRANCH) {
+            run_branch(std::reinterpret_pointer_cast<BranchNode>(node));
         }
     }
+    variableScopes.pop_back();
 }
 
-void run_program(std::shared_ptr<Node> node) {
-    for(auto &statement: node->leafs) {
-        run_statement(statement);
-    }
+void run_program(std::shared_ptr<ProgramNode> node) {
+    variableScopes.emplace_back(); // Setup global scope
+    run_block(node->programBlock);
 }
 
-void* get_var(std::string var) {
-    auto it = globalVariables.find(var);
-    if(it == globalVariables.end()) {
-        return nullptr;
-    }
-    return globalVariables[var].value;
+HInt get_int_var(std::string varName) {
+    auto var = resolve_variable(varName);
+    if(var) var->GetValue<HInt>();
+    fprintf(stderr, "Variable %s does not exist returning 0\n", varName.c_str());
+    return 0;
+}
+
+HBool get_bool_var(std::string varName) {
+    auto var = resolve_variable(varName);
+    if(var) return var->GetValue<HBool>();
+    fprintf(stderr, "Variable %s does not exist returning false\n", varName.c_str());
+    return false;
 }
